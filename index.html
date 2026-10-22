@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>熱雑音バックスキャッター通信 解説</title>
+<script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    line-height: 1.6;
+    color: #222;
+    background-color: #f7f9fa;
+    margin: 0;
+    padding: 24px;
+  }
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 32px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  }
+  h1 {
+    font-size: 1.6rem;
+    color: #0f172a;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 12px;
+    margin-top: 0;
+  }
+  h2 {
+    font-size: 1.25rem;
+    color: #1e293b;
+    margin-top: 28px;
+  }
+  .controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    background-color: #2563eb;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  button:hover {
+    background-color: #1d4ed8;
+  }
+  .status-badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 14px;
+    background: #e2e8f0;
+    color: #334155;
+  }
+  .state-1 {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+  .state-0 {
+    background: #e0f2fe;
+    color: #0369a1;
+  }
+  canvas {
+    width: 100%;
+    height: 360px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background-color: #0b1120;
+    display: block;
+  }
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .card {
+    padding: 16px;
+    border-radius: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+  }
+  .formula-box {
+    background: #f1f5f9;
+    padding: 16px;
+    border-left: 4px solid #2563eb;
+    border-radius: 4px;
+    margin: 16px 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>熱雑音バックスキャッター通信（仕組みと理論）</h1>
+
+  <div class="controls">
+    <button id="toggleBtn">送信ビット切り替え (現在: 0 / 吸収)</button>
+    <button id="autoBtn">自動変調: OFF</button>
+    <span id="badge" class="status-badge state-0">ビット: 0 (端子整合・吸収)</span>
+  </div>
+
+  <canvas id="simCanvas" width="900" height="360"></canvas>
+
+  <h2>1. 動作メカニズム</h2>
+  <div class="card-grid">
+    <div class="card">
+      <strong>ビット「1」：全反射モード</strong>
+      <p>送信アンテナ端子を短絡（ショート）または開放（オープン）に切り替えます。周囲から入射した環境熱雑音はアンテナで吸収されず、強力に反射波として受信機へ戻ります。</p>
+    </div>
+    <div class="card">
+      <strong>ビット「0」：整合・吸収モード</strong>
+      <p>アンテナ端子に特性インピーダンスに等しい抵抗を接続（整合負荷）。熱雑音はアンテナに吸収され、受信機側への反射雑音電力が大幅に低下します。</p>
+    </div>
+  </div>
+
+  <h2>2. 物理背景と数式</h2>
+  <p>送信機自体は搬送波（電波）を一切出力しません。導体内の電子の揺らぎである<strong>ジョンソン・ナイキスト熱雑音</strong>の反射率を変調（バックスキャッター）します。</p>
+
+  <div class="formula-box">
+    <strong>熱雑音電力（ジョンソン・ナイキストの式）：</strong>
+    $$P_{\text{noise}} = k_B T B$$
+    <ul>
+      <li>\(k_B\)：ボルツマン定数 (\(1.38 \times 10^{-23} \, \text{J/K}\))</li>
+      <li>\(T\)：絶対温度 [K]（室温 \( \approx 300\,\text{K} \)）</li>
+      <li>\(B\)：受信帯域幅 [Hz]</li>
+    </ul>
+  </div>
+
+  <div class="formula-box">
+    <strong>反射係数 \(\Gamma\) による変調：</strong>
+    $$\Gamma = \frac{Z_L - Z_0}{Z_L + Z_0}$$
+    <ul>
+      <li>整合時（ビット0）：\(Z_L = Z_0 \implies \Gamma = 0\)（無反射・吸収）</li>
+      <li>短絡時（ビット1）：\(Z_L = 0 \implies \Gamma = -1\)（全反射）</li>
+      <li>開放時（ビット1）：\(Z_L = \infty \implies \Gamma = +1\)（全反射）</li>
+    </ul>
+  </div>
+
+  <div class="formula-box">
+    <strong>通信路容量の上限（シャノンの定理と極符号）：</strong>
+    $$C = B \log_2 \left(1 + \frac{\Delta P_{\text{reflected}}}{P_{\text{rx\_noise}}}\right)$$
+    斯坦福大学のチームは、反射・吸収の微小な雑音電力差 \(\Delta P\) を正確に捉える数理モデルを導出。極符号（Polar Code）を適用することで、この理論限界に近い毎秒キロビット級の通信を達成しました。
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+
+let bitState = 0; // 0: 吸収, 1: 反射
+let autoInterval = null;
+
+const toggleBtn = document.getElementById('toggleBtn');
+const autoBtn = document.getElementById('autoBtn');
+const badge = document.getElementById('badge');
+
+function updateUI() {
+  if (bitState === 1) {
+    toggleBtn.textContent = '送信ビット切り替え (現在: 1 / 反射)';
+    badge.textContent = 'ビット: 1 (短絡/開放・全反射)';
+    badge.className = 'status-badge state-1';
+  } else {
+    toggleBtn.textContent = '送信ビット切り替え (現在: 0 / 吸収)';
+    badge.textContent = 'ビット: 0 (整合負荷・吸収)';
+    badge.className = 'status-badge state-0';
+  }
+}
+
+toggleBtn.addEventListener('click', () => {
+  bitState = bitState === 0 ? 1 : 0;
+  updateUI();
+});
+
+autoBtn.addEventListener('click', () => {
+  if (autoInterval) {
+    clearInterval(autoInterval);
+    autoInterval = null;
+    autoBtn.textContent = '自動変調: OFF';
+  } else {
+    autoInterval = setInterval(() => {
+      bitState = bitState === 0 ? 1 : 0;
+      updateUI();
+    }, 1400);
+    autoBtn.textContent = '自動変調: ON';
+  }
+});
+
+// 粒子シミュレーション（熱雑音フォトン・波パケットの視覚化）
+const particles = [];
+const PARTICLE_COUNT = 90;
+
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  particles.push({
+    x: Math.random() * 800 + 50,
+    y: Math.random() * 200 + 80,
+    vx: (Math.random() - 0.5) * 1.5 - 2, // 全体として左（送信機方向）に漂う環境雑音
+    vy: (Math.random() - 0.5) * 1.5,
+    bounced: false,
+    alpha: Math.random() * 0.7 + 0.3
+  });
+}
+
+const txX = 180;
+const rxX = 720;
+let phase = 0;
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  phase += 0.08;
+
+  // 1. 送信機（Tx: 反射板・スイッチ回路）
+  ctx.fillStyle = '#1e293b';
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 2;
+  ctx.fillRect(txX - 40, 90, 80, 180);
+  ctx.strokeRect(txX - 40, 90, 80, 180);
+
+  // 送信アンテナ
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(txX + 20, 120);
+  ctx.lineTo(txX + 50, 90);
+  ctx.lineTo(txX + 50, 150);
+  ctx.closePath();
+  ctx.stroke();
+
+  // スイッチ内部描画
+  ctx.fillStyle = '#fff';
+  ctx.font = '12px sans-serif';
+  ctx.fillText('送信側 (無給電)', txX - 35, 115);
+
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(txX - 20, 180);
+  ctx.lineTo(txX - 5, 180);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(txX - 2, 180, 3, 0, Math.PI * 2);
+  ctx.stroke();
+
+  if (bitState === 1) {
+    // 短絡 (ON)
+    ctx.beginPath();
+    ctx.moveTo(txX - 2, 180);
+    ctx.lineTo(txX + 15, 180);
+    ctx.stroke();
+    ctx.fillStyle = '#ef4444';
+    ctx.fillText('端子: 短絡 (Γ = -1)', txX - 35, 230);
+  } else {
+    // 整合負荷側へ接続 (吸収)
+    ctx.beginPath();
+    ctx.moveTo(txX - 2, 180);
+    ctx.lineTo(txX + 10, 165);
+    ctx.stroke();
+    // 終端抵抗
+    ctx.fillStyle = '#10b981';
+    ctx.fillText('端子: 終端 (Γ = 0)', txX - 35, 230);
+  }
+
+  // 2. 受信機（Rx: 高感度増幅・検出部）
+  ctx.fillStyle = '#1e293b';
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 2;
+  ctx.fillRect(rxX - 40, 90, 80, 180);
+  ctx.strokeRect(rxX - 40, 90, 80, 180);
+
+  // 受信アンテナ
+  ctx.strokeStyle = '#a855f7';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(rxX - 20, 120);
+  ctx.lineTo(rxX - 50, 90);
+  ctx.lineTo(rxX - 50, 150);
+  ctx.closePath();
+  ctx.stroke();
+
+  ctx.fillStyle = '#fff';
+  ctx.fillText('受信機 (Rx)', rxX - 28, 115);
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText('雑音電力測定', rxX - 34, 150);
+
+  // 受信メータ/判定
+  ctx.fillStyle = bitState === 1 ? '#ef4444' : '#0284c7';
+  ctx.fillRect(rxX - 25, 200, 50, 16);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 11px sans-serif';
+  ctx.fillText(bitState === 1 ? '高電力 (1)' : '低電力 (0)', rxX - 24, 213);
+
+  // 3. 環境熱雑音と反射粒子の挙動
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // 送信機アンテナ付近に到達した時の処理
+    if (p.x <= txX + 50 && p.x >= txX + 20 && p.y >= 70 && p.y <= 210) {
+      if (bitState === 1) {
+        // 反射
+        p.vx = Math.abs(p.vx) + 1.2;
+        p.bounced = true;
+      } else {
+        // 吸収（リセット）
+        p.x = Math.random() * 200 + 600;
+        p.y = Math.random() * 180 + 90;
+        p.vx = -Math.random() * 2 - 1;
+        p.bounced = false;
+      }
+    }
+
+    // 画面外や受信機側へ通り抜けた粒子の巡回
+    if (p.x < 50 || p.x > 850 || p.y < 50 || p.y > 310) {
+      p.x = Math.random() * 200 + 650;
+      p.y = Math.random() * 180 + 90;
+      p.vx = -Math.random() * 2 - 1;
+      p.bounced = false;
+    }
+
+    ctx.fillStyle = p.bounced ? `rgba(239, 68, 68, ${p.alpha})` : `rgba(148, 163, 184, ${p.alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.bounced ? 3.5 : 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // 4. 反射波の明示波形（ビット1の時のみ表示）
+  if (bitState === 1) {
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = txX + 60; x <= rxX - 50; x += 5) {
+      const y = 260 + Math.sin((x * 0.05) - phase) * 12 + (Math.random() - 0.5) * 6;
+      if (x === txX + 60) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#f87171';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('反射された熱雑音パルス (変調波)', (txX + rxX)/2 - 80, 290);
+  }
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+
+</body>
+</html>
